@@ -25,14 +25,20 @@ public :
     
     std::vector<float> getProfile(const QPoint& start, const QPoint& end, int steps = 100);
     float sampleAt(const QPoint& point);
+    float distance(const QVector3D& p1, const QVector3D& p2);
     float computeDistance(const QVector3D& p1, const QVector3D& p2);
     float computeDistanceToNormal(const QVector3D& point, const QVector3D& normal, const QVector3D& origin);
-    void applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations = 10, float tolerance = 1e-6);
+    //void applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations = 10, float tolerance = 1e-6);
+    std::vector<QVector3D> findClosestPoints(const std::vector<QVector3D>& source, const std::vector<QVector3D>& target);
+    void performICP(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints, int maxIterations = 10);
+    void alignMeshWithPointCloud();
     void display2DProjection(const cimg_library::CImg<unsigned char>& projection);
     void open3DImage(const QString & fileName);
     bool openCImage(const QString& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData, std::vector<QVector3D>& points);
-    void openOffMesh(const QString & fileName);
-    void loadOffMesh();
+    void openMesh();
+    void loadOffMesh(std::ifstream& myfile);
+    void loadPlyMesh(std::ifstream& myfile);
+    void loadObjMesh(std::ifstream& myfile);
     void recalage();
     void calculateBoundingBox();
     void scaleMeshToFitBoundingBox(float scaleFactor);

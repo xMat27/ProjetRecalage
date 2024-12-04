@@ -37,10 +37,17 @@ struct Mat3D {
     }
 };
 
+// Fonction pour calculer la distance entre deux QVector3D
+float TextureViewer::distance(const QVector3D& p1, const QVector3D& p2) {
+    return (p1 - p2).length();
+}
+
 struct Point3D {
     float x, y, z; 
     unsigned char value; 
 };
+
+std::vector<QVector3D> points;
 
 TextureViewer::TextureViewer(QWidget *parent):QGLViewer(parent){
 }
@@ -131,7 +138,6 @@ void TextureViewer::init()
     //Set blend parameters
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    std::vector<QVector3D> points;
 
     
     imageLoaded = false;
@@ -281,9 +287,9 @@ void TextureViewer::open3DImage(const QString& fileName) {
 
     // Afficher les points récupérés
     qDebug() << "Nombre de points récupérés : " << points.size();
-    for (const QVector3D& point : points) {
-        qDebug() << "Point : (" << point.x() << ", " << point.y() << ", " << point.z() << ")";
-    }
+//     for (const QVector3D& point : points) {
+//         qDebug() << "Point : (" << point.x() << ", " << point.y() << ", " << point.z() << ")";
+//     }
 }
 
 
@@ -363,85 +369,162 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
 
 
 
-void TextureViewer::openOffMesh(const QString &fileName) {
-    std::cout << "Opening " << fileName.toStdString() << std::endl;
-
-    // open the file
-    std::ifstream myfile;
-    myfile.open(fileName.toStdString());
-    if (!myfile.is_open())
-    {
-        std::cout << fileName.toStdString() << " cannot be opened" << std::endl;
-        return;
-    }
-
+void TextureViewer::loadOffMesh(std::ifstream& myfile) {
     std::string magic_s;
-
     myfile >> magic_s;
 
-    // check if it's OFF
-    if( magic_s != "OFF" )
-    {
-        std::cout << magic_s << " != OFF :   We handle ONLY *.off files." << std::endl;
-        myfile.close();
+    if (magic_s != "OFF") {
+        std::cout << magic_s << " != OFF: We handle ONLY *.off files." << std::endl;
         exit(1);
     }
 
-    int n_vertices , n_faces , dummy_int;
+    int n_vertices, n_faces, dummy_int;
     myfile >> n_vertices >> n_faces >> dummy_int;
 
-    // Clear any verticies
+    // Clear any vertices and triangles
     vertices.clear();
-
-    // Read the verticies
-    for( int v = 0 ; v < n_vertices ; ++v )
-    {
-        float x , y , z;
-        myfile >> x >> y >> z ;
-        vertices.push_back( Vec( x , y , z ) );
-    }
-
-    // Clear any triangles
     triangles.clear();
 
+    // Read the vertices
+    for (int v = 0; v < n_vertices; ++v) {
+        float x, y, z;
+        myfile >> x >> y >> z;
+        vertices.push_back(Vec(x, y, z));
+    }
+
     // Read the triangles
-    for( int f = 0 ; f < n_faces ; ++f )
-    {
+    for (int f = 0; f < n_faces; ++f) {
         int n_vertices_on_face;
         myfile >> n_vertices_on_face;
-        if( n_vertices_on_face == 3 )
-        {
-            unsigned int _v1 , _v2 , _v3;
-            myfile >> _v1 >> _v2 >> _v3;
-            triangles.push_back( {_v1, _v2, _v3} );
-        }
-        else if( n_vertices_on_face == 4 )
-        {
-            unsigned int _v1 , _v2 , _v3 , _v4;
 
+        if (n_vertices_on_face == 3) {
+            unsigned int _v1, _v2, _v3;
+            myfile >> _v1 >> _v2 >> _v3;
+            triangles.push_back({_v1, _v2, _v3});
+        } else if (n_vertices_on_face == 4) {
+            unsigned int _v1, _v2, _v3, _v4;
             myfile >> _v1 >> _v2 >> _v3 >> _v4;
             triangles.push_back({_v1, _v2, _v3});
             triangles.push_back({_v1, _v3, _v4});
         }
-        else
-        {
-            std::cout << "We handle ONLY *.off files with 3 or 4 vertices per face" << std::endl;
-            myfile.close();
-            exit(1);
+    }
+}
+
+
+void TextureViewer::loadObjMesh(std::ifstream& myfile) {
+    vertices.clear();
+    triangles.clear();
+
+    std::string line;
+    while (std::getline(myfile, line)) {
+        std::istringstream iss(line);
+        std::string prefix;
+        iss >> prefix;
+
+        if (prefix == "v") { // Vertex
+            float x, y, z;
+            iss >> x >> y >> z;
+            vertices.push_back(Vec(x, y, z));
+        } else if (prefix == "f") { // Face
+            unsigned int v1, v2, v3;
+            iss >> v1 >> v2 >> v3;
+            // OBJ indices are 1-based; convert to 0-based
+            triangles.push_back({v1 - 1, v2 - 1, v3 - 1});
         }
     }
+}
 
-    scaleMeshToFitBoundingBox(40.0);
-    update();
+void TextureViewer::loadPlyMesh(std::ifstream& myfile) {
+    vertices.clear();
+    triangles.clear();
 
+    std::string line;
+    bool header = true;
+    int n_vertices = 0, n_faces = 0;
+
+    while (std::getline(myfile, line)) {
+        if (header) {
+            if (line.find("element vertex") != std::string::npos) {
+                std::istringstream iss(line);
+                std::string dummy;
+                iss >> dummy >> dummy >> n_vertices;
+            } else if (line.find("element face") != std::string::npos) {
+                std::istringstream iss(line);
+                std::string dummy;
+                iss >> dummy >> dummy >> n_faces;
+            } else if (line == "end_header") {
+                header = false;
+            }
+        } else if (n_vertices > 0) {
+            // Read vertices
+            std::istringstream iss(line);
+            float x, y, z;
+            iss >> x >> y >> z;
+            vertices.push_back(Vec(x, y, z));
+            --n_vertices;
+        } else if (n_faces > 0) {
+            // Read faces
+            std::istringstream iss(line);
+            int n_vertices_on_face;
+            iss >> n_vertices_on_face;
+
+            if (n_vertices_on_face == 3) {
+                unsigned int v1, v2, v3;
+                iss >> v1 >> v2 >> v3;
+                triangles.push_back({v1, v2, v3});
+            } else if (n_vertices_on_face == 4) {
+                unsigned int v1, v2, v3, v4;
+                iss >> v1 >> v2 >> v3 >> v4;
+                triangles.push_back({v1, v2, v3});
+                triangles.push_back({v1, v3, v4});
+            }
+            --n_faces;
+        }
+    }
+}
+
+std::vector<QVector3D> TextureViewer::findClosestPoints(const std::vector<QVector3D>& source, const std::vector<QVector3D>& target) {
+    std::vector<QVector3D> correspondences;
+
+    for (const auto& s : source) {
+        float minDist = std::numeric_limits<float>::max();
+        QVector3D closestPoint;
+
+        for (const auto& t : target) {
+            float dist = distance(s, t);
+            if (dist < minDist) {
+                minDist = dist;
+                closestPoint = t;
+            }
+        }
+        correspondences.push_back(closestPoint);
+    }
+
+    return correspondences;
 }
 
 QVector3D computeCentroid(const std::vector<QVector3D>& points) {
-    QVector3D centroid = {0, 0, 0};
-    for (const auto& point : points) {
-        centroid = centroid + point;
+    QVector3D centroid(0.0f, 0.0f, 0.0f);
+    for (const auto& p : points) {
+        centroid += p;
     }
-    return centroid / static_cast<float>(points.size());
+    return centroid / points.size();
+}
+
+void computeTransformation(const std::vector<QVector3D>& source, const std::vector<QVector3D>& target, 
+                           QVector3D& translation) {
+    // Calcul des barycentres
+    QVector3D centroidSource = computeCentroid(source);
+    QVector3D centroidTarget = computeCentroid(target);
+
+    // La translation est la différence entre les barycentres
+    translation = centroidTarget - centroidSource;
+}
+
+void applyTransformation(std::vector<QVector3D>& points, const QVector3D& translation) {
+    for (auto& p : points) {
+        p += translation;
+    }
 }
 
 Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centroidB, const std::vector<QVector3D>& A, const std::vector<QVector3D>& B) {
@@ -478,80 +561,161 @@ Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centro
     return rotation;
 }
 
-void TextureViewer::applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations, float tolerance) {
+// void TextureViewer::applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations, float tolerance) {
     
-    // if (vertices.empty()) {
-    //     std::cerr << "No vertices loaded. Please load a mesh before running ICP." << std::endl;
-    //     return;
-    // }
+//     // if (vertices.empty()) {
+//     //     std::cerr << "No vertices loaded. Please load a mesh before running ICP." << std::endl;
+//     //     return;
+//     // }
 
 
-    // std::vector<QVector3D> sourcePoints(vertices.size());
-    // for (size_t i = 0; i < vertices.size(); ++i) {
-    //     sourcePoints[i] = {vertices[i][0], vertices[i][1], vertices[i][2]};
-    // }
+//     // std::vector<QVector3D> sourcePoints(vertices.size());
+//     // for (size_t i = 0; i < vertices.size(); ++i) {
+//     //     sourcePoints[i] = {vertices[i][0], vertices[i][1], vertices[i][2]};
+//     // }
 
-    Mat3D rotation = {{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
-    QVector3D translation = {0, 0, 0};
-    for (int iter = 0; iter < maxIterations; ++iter) {
+//     Mat3D rotation = {{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+//     QVector3D translation = {0, 0, 0};
+//     for (int iter = 0; iter < maxIterations; ++iter) {
 
-        std::vector<QVector3D> closestPoints;
-        for (const auto& source : sourcePoints) {
-            float minDistance = std::numeric_limits<float>::max();
-            QVector3D closest;
+//         std::vector<QVector3D> closestPoints;
+//         for (const auto& source : sourcePoints) {
+//             float minDistance = std::numeric_limits<float>::max();
+//             QVector3D closest;
 
-            for (const auto& target : targetPoints) {
-                float dist = computeDistance(source, target);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closest = target;
-                }
-            }
-            closestPoints.push_back(closest);
-        }
+//             for (const auto& target : targetPoints) {
+//                 float dist = computeDistance(source, target);
+//                 if (dist < minDistance) {
+//                     minDistance = dist;
+//                     closest = target;
+//                 }
+//             }
+//             closestPoints.push_back(closest);
+//         }
 
 
-        QVector3D centroidSource = computeCentroid(sourcePoints);
-        QVector3D centroidTarget = computeCentroid(closestPoints);
-        Mat3D optimalRotation = computeOptimalRotation(centroidSource, centroidTarget, sourcePoints, closestPoints);
-        QVector3D optimalTranslation = centroidTarget - (optimalRotation * centroidSource);
+//         QVector3D centroidSource = computeCentroid(sourcePoints);
+//         QVector3D centroidTarget = computeCentroid(closestPoints);
+//         Mat3D optimalRotation = computeOptimalRotation(centroidSource, centroidTarget, sourcePoints, closestPoints);
+//         QVector3D optimalTranslation = centroidTarget - (optimalRotation * centroidSource);
 
-        for (auto& source : sourcePoints) {
-            source = optimalRotation * source + optimalTranslation;
-        }
+//         for (auto& source : sourcePoints) {
+//             source = optimalRotation * source + optimalTranslation;
+//         }
         
-        rotation = optimalRotation;
-        translation = optimalTranslation;
+//         rotation = optimalRotation;
+//         translation = optimalTranslation;
 
-        // if (optimalTranslation.normalize() < tolerance) {
-        //     std::cout << "ICP converged in " << iter + 1 << " iterations." << std::endl;
-        //     break;
-        // }
+//         // if (optimalTranslation.normalize() < tolerance) {
+//         //     std::cout << "ICP converged in " << iter + 1 << " iterations." << std::endl;
+//         //     break;
+//         // }
+//     }
+
+
+//     // for (size_t i = 0; i < vertices.size(); ++i) {
+//     //     vertices[i] = {sourcePoints[i][0], sourcePoints[i][1], sourcePoints[i][2]};
+//     // }
+
+//     update();
+// }
+
+void TextureViewer::performICP(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints, int maxIterations) {
+    for (int iter = 0; iter < maxIterations; ++iter) {
+        // Étape 1 : Trouver les correspondances
+        std::vector<QVector3D> correspondences = findClosestPoints(meshVertices, cloudPoints);
+
+        // Étape 2 : Calculer la transformation
+        QVector3D translation;
+        computeTransformation(meshVertices, correspondences, translation);
+
+        // Étape 3 : Appliquer la transformation
+        applyTransformation(meshVertices, translation);
+
+        // Afficher l'état de la transformation
+        qDebug() << "Iteration" << iter << ": Translation" << translation;
+
+        // Critère d'arrêt : si la translation est proche de 0, on arrête
+        if (translation.length() < 1e-5) {
+            break;
+        }
+    }
+}
+
+void TextureViewer::alignMeshWithPointCloud() {
+    // Convertir les sommets du maillage en QVector3D
+    std::vector<QVector3D> meshVertices;
+    for (const Vec& vertex : vertices) {
+        meshVertices.emplace_back(vertex.x, vertex.y, vertex.z);
     }
 
+    // `points` contient les points 3D extraits de l'image `.mhd`
+    performICP(meshVertices, points);
 
-    // for (size_t i = 0; i < vertices.size(); ++i) {
-    //     vertices[i] = {sourcePoints[i][0], sourcePoints[i][1], sourcePoints[i][2]};
-    // }
+    // Mettre à jour les sommets du maillage après recalage
+    vertices.clear();
+    for (const auto& point : meshVertices) {
+        vertices.push_back(Vec(point.x(), point.y(), point.z()));
+    }
 
+    // Rafraîchir l'affichage
     update();
 }
 
 
-void TextureViewer::loadOffMesh() {
+
+// void TextureViewer::loadOffMesh() {
+//     QString fileName = QFileDialog::getOpenFileName(this, "Open OFF File", "", "OFF Files (*.off);;All Files (*)");
+//     if (!fileName.isEmpty()) {
+//         openOffMesh(fileName);
+//     }
+// }
+
+void TextureViewer::openMesh() {
     QString fileName = QFileDialog::getOpenFileName(this, "Open OFF File", "", "OFF Files (*.off);;All Files (*)");
-    if (!fileName.isEmpty()) {
-        openOffMesh(fileName);
+    std::cout << "Opening " << fileName.toStdString() << std::endl;
+
+    // Open the file
+    std::ifstream myfile(fileName.toStdString());
+    if (!myfile.is_open()) {
+        std::cout << fileName.toStdString() << " cannot be opened" << std::endl;
+        return;
     }
+
+    // Determine the file format
+    std::string extension = fileName.toStdString().substr(fileName.toStdString().find_last_of('.') + 1);
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+    if (extension == "off") {
+        loadOffMesh(myfile);
+    } else if (extension == "obj") {
+        loadObjMesh(myfile);
+    } else if (extension == "ply") {
+        loadPlyMesh(myfile);
+    } else {
+        std::cout << "Unsupported file format: " << extension << std::endl;
+    }
+
+    myfile.close();
+
+    // Scale the mesh and update the viewer
+    scaleMeshToFitBoundingBox(1.0);
+    update();
 }
 
 
-void TextureViewer::recalage(){
 
-    //applyICP(points, );
+// void TextureViewer::recalage(){
 
-    std::cout << "Recalage"<< std::endl;
-}
+//     std::vector<QVector3D> meshVertices;
+//     for (const Vec& vertex : vertices) {
+//         meshVertices.emplace_back(vertex.x, vertex.y, vertex.z);
+//     }
+
+//     applyICP(points, meshVertices);
+
+//     std::cout << "Recalage"<< std::endl;
+// }
 
 
 

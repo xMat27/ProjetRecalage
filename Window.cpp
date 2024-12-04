@@ -40,8 +40,8 @@ Window::Window()
 
     connect(actionLoad3Dimage, SIGNAL(triggered()), this, SLOT(open3DImage()));
     //connect(actionLoadCimage, SIGNAL(triggered()), this, SLOT(openCImage()));
-    connect(actionLoadOffMesh, &QAction::triggered, viewer, &TextureViewer::loadOffMesh);
-    connect(actionRecale, &QAction::triggered, viewer, &TextureViewer::recalage);
+    connect(actionLoadOffMesh, &QAction::triggered, viewer, &TextureViewer::openMesh);
+    connect(actionRecale, &QAction::triggered, viewer, &TextureViewer::alignMeshWithPointCloud);
     connect(recompileShaders, &QAction::triggered, viewer, &TextureViewer::recompileShaders);
 
     QGroupBox * viewerGroupBox = new QGroupBox ("Texture viewer", this);
