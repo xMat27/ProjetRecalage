@@ -92,7 +92,7 @@ Window::Window()
 void Window::open3DImage(){
 
     QString selectedFilter, openFileNameLabel;
-    QString fileFilter = "Known Filetypes (*.dim *.nii);;IMA (*.dim);;NIFTI (*.nii)";
+    QString fileFilter = "Known Filetypes (*.dim *.nii);;IMA (*.dim);;NIFTI (*.nii);;MHD (*.mhd)";
 
     QString fileName = QFileDialog::getOpenFileName(this,
                                                     tr("Select an input 3D image"),
@@ -106,7 +106,7 @@ void Window::open3DImage(){
     }
 
     statusBar()->showMessage("Opening 3D image...");
-    if(fileName.endsWith(".dim") || fileName.endsWith(".nii") ){
+    if(fileName.endsWith(".dim") || fileName.endsWith(".nii") || fileName.endsWith(".mhd") ){
         viewer->open3DImage(fileName);
         statusBar()->showMessage("3D image opened");
 

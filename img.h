@@ -1,4 +1,6 @@
 #include "CImg.h"
+//#include "img.inl"
+
 using namespace cimg_library;
 
 template<typename T,typename Real>

@@ -7,16 +7,23 @@
 #include <QVector3D>
 #include <QDebug>
 #include <vector>
+#include <QLabel>
+#include <QVBoxLayout>
+
+#include "CImg.h"
+
+//#include "img.h"
+
+#include "img.inl"
+//#include "mathematics.h"
 
 //#include "ICP.h"
 
 using namespace std;
 using namespace qglviewer;
+using namespace cimg_library;
 
-#include "CImg.h"
 
-#include "img.h"
-#include "mathematics.h"
 
 struct Mat3D {
     float m[3][3];
@@ -28,6 +35,11 @@ struct Mat3D {
             m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2]
         };
     }
+};
+
+struct Point3D {
+    float x, y, z; 
+    unsigned char value; 
 };
 
 TextureViewer::TextureViewer(QWidget *parent):QGLViewer(parent){
@@ -118,6 +130,8 @@ void TextureViewer::init()
     
     //Set blend parameters
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    std::vector<QVector3D> points;
 
     
     imageLoaded = false;
@@ -212,91 +226,141 @@ void TextureViewer::scaleMeshToFitBoundingBox(float scaleFactor) {
 
 
 
-void TextureViewer::open3DImage(const QString & fileName){
-    
-    //Texture objet
+void TextureViewer::open3DImage(const QString& fileName) {
+    // Réinitialisation de l'objet texture et des indices de sous-domaines
     texture->clear();
     subdomain_indices.clear();
     std::vector<unsigned char> data;
     unsigned int nx, ny, nz;
     float dx, dy, dz;
-    std::vector<unsigned char> imageData;
     
-    
-    //Load the data from the 3D image
-    if (fileName.endsWith(".dim"))
-        openIMA(fileName,data,subdomain_indices, nx,ny,nz,dx,dy,dz);
-    else if (fileName.endsWith(".mhd")) {
-        // Charger le fichier MHD avec CImg
-        // if (!openCImage(fileName.toStdString(), nx, ny, nz, dx, dy, dz, imageData)) {
-        //     qWarning("Échec du chargement de l'image .mhd");
-        //     return;
-        // }
 
-        // Convertir les données de float à unsigned char (normalisation)
-        data.resize(imageData.size());
-        for (size_t i = 0; i < imageData.size(); ++i) {
-            data[i] = imageData[i];
+    // Charger l'image 3D en fonction de son extension
+    if (fileName.endsWith(".dim")) {
+        openIMA(fileName, data, subdomain_indices, nx, ny, nz, dx, dy, dz);
+    } else if (fileName.endsWith(".mhd")) {
+        if (!openCImage(fileName, nx, ny, nz, dx, dy, dz, data, points)) {
+            qWarning("Échec du chargement de l'image .mhd");
+            return;
         }
+
+        // Normalisation des données (conversion de float à unsigned char si nécessaire)
+        std::vector<unsigned char> imageData(data.begin(), data.end());
 
         // Simuler les indices de sous-domaines (par exemple : 1 partout)
         subdomain_indices.resize(nx * ny * nz, 1);
-    } else
+    } else {
+        qWarning("Format de fichier non pris en charge");
         return;
-    
-    for(unsigned int i = 0 ; i < subdomain_indices.size() ; i++ ){
-        int currentLabel = subdomain_indices[i];
-        
-        std::map<unsigned char, QColor>::iterator it = iColorMap.find( currentLabel );
-        if( it == iColorMap.end() ){
-            if( currentLabel ==0 )
-                iColorMap[currentLabel] = QColor(0,0,0);
-            else
-                iColorMap[currentLabel].setHsvF(0.98*double(i)/subdomain_indices.size(), 0.8,0.8);
-        }
+    }
 
+    // Gérer la coloration des sous-domaines et la visibilité
+    for (unsigned int i = 0; i < subdomain_indices.size(); i++) {
+        int currentLabel = subdomain_indices[i];
+        std::map<unsigned char, QColor>::iterator it = iColorMap.find(currentLabel);
+        if (it == iColorMap.end()) {
+            if (currentLabel == 0)
+                iColorMap[currentLabel] = QColor(0, 0, 0);
+            else
+                iColorMap[currentLabel].setHsvF(0.98 * double(i) / subdomain_indices.size(), 0.8, 0.8);
+        }
         iDisplayMap[currentLabel] = true;
     }
-    //iColorMap[0].setAlpha(0);
-    texture->build(data,subdomain_indices,nx,ny,nz,dx,dy,dz,iColorMap);
-    
-    imageLoaded = true;
-    
-    qglviewer::Vec maxTexture (texture->getXMax(), texture->getYMax() , texture->getZMax());
-    
-    updateCamera(maxTexture/2. , maxTexture.norm() );
 
-    //Once the 3D image is loaded, grid size parameters are sent to the interface
+    // Construction de la texture
+    texture->build(data, subdomain_indices, nx, ny, nz, dx, dy, dz, iColorMap);
+    imageLoaded = true;
+
+    // Mise à jour de la caméra
+    qglviewer::Vec maxTexture(texture->getXMax(), texture->getYMax(), texture->getZMax());
+    updateCamera(maxTexture / 2., maxTexture.norm());
+
+    // Envoyer les paramètres de taille de grille à l'interface
     emit setMaxCutPlanes(texture->getWidth(), texture->getHeight(), texture->getDepth());
     emit setImageLabels();
+
+    // Afficher les points récupérés
+    qDebug() << "Nombre de points récupérés : " << points.size();
+    for (const QVector3D& point : points) {
+        qDebug() << "Point : (" << point.x() << ", " << point.y() << ", " << point.z() << ")";
+    }
 }
 
-bool TextureViewer::openCImage(const std::string& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData) {
-    // try {
-    //     // Charger l'image 3D avec ses métadonnées
-    //     IMG image;
-    //     image.load_metaimage(filename.c_str());
 
-    //     // Récupérer les dimensions
-    //     nx = image.width();
-    //     ny = image.height();
-    //     nz = image.depth();
+void TextureViewer::display2DProjection(const cimg_library::CImg<unsigned char>& projection) {
+    // Convertir les données de la projection en texture OpenGL
+    QImage image(projection.data(), projection.width(), projection.height(), QImage::Format_Grayscale8);
+    QPixmap pixmap = QPixmap::fromImage(image);
 
-    //     // Récupérer les espacements voxel
-    //     const float* spacing = image._meta_info.spacing;
-    //     dx = spacing[0];
-    //     dy = spacing[1];
-    //     dz = spacing[2];
+    // Utiliser un QLabel pour afficher la texture dans votre interface
+    QLabel* label = new QLabel();
+    label->setPixmap(pixmap);
+    label->setAlignment(Qt::AlignCenter);
 
-    //     // Convertir les données de l'image en tableau 1D
-    //     imageData.assign(image.data(), image.data() + nx * ny * nz);
-
-    //     return true;
-    // } catch (CImgException& e) {
-    //     std::cerr << "Erreur lors du chargement de l'image .mhd : " << e.what() << std::endl;
-    //     return false;
-    // }
+    // Afficher dans une nouvelle fenêtre
+    QWidget* viewer = new QWidget();
+    viewer->setWindowTitle("Projection 2D");
+    QVBoxLayout* layout = new QVBoxLayout(viewer);
+    layout->addWidget(label);
+    viewer->setLayout(layout);
+    viewer->resize(800, 600);
+    viewer->show();
 }
+
+bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, 
+                                float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData, 
+                                std::vector<QVector3D>& points) {
+    try {
+        if (filename.endsWith(".mhd")) {
+            // Charger les métadonnées du fichier .mhd
+            IMG<unsigned char, float> img;
+            img.load_metaimage(filename.toStdString().c_str());
+
+            // Récupérer les dimensions de l'image
+            nx = img.img.width();
+            ny = img.img.height();
+            nz = img.img.depth();
+
+            // Récupérer l'espacement des voxels
+            dx = img.voxelSize[0];
+            dy = img.voxelSize[1];
+            dz = img.voxelSize[2];
+
+            // Copier les données dans un vecteur
+            imageData.assign(img.img.data(), img.img.data() + nx * ny * nz);
+
+            // Récupérer les points 3D (convertir les indices de voxels en coordonnées réelles)
+            points.clear();
+            for (unsigned int z = 0; z < nz; ++z) {
+                for (unsigned int y = 0; y < ny; ++y) {
+                    for (unsigned int x = 0; x < nx; ++x) {
+                        unsigned char value = img.img(x, y, z);
+
+                        // Convertir les indices (x, y, z) en coordonnées réelles 3D et utiliser QVector3D
+                        QVector3D point;
+                        point.setX(x * dx);
+                        point.setY(y * dy);
+                        point.setZ(z * dz);
+
+                        // Ajouter le point à la liste des points
+                        points.push_back(point);
+                    }
+                }
+            }
+
+            return true;
+        } else {
+            qWarning("Fichier non supporté : %s", filename.toStdString().c_str());
+            return false;
+        }
+    } catch (const std::exception& e) {
+        qWarning("Erreur lors du chargement de l'image : %s", e.what());
+        return false;
+    }
+}
+
+
+
 
 
 void TextureViewer::openOffMesh(const QString &fileName) {
@@ -484,7 +548,7 @@ void TextureViewer::loadOffMesh() {
 
 void TextureViewer::recalage(){
 
-    //applyICP(vertices, );
+    //applyICP(points, );
 
     std::cout << "Recalage"<< std::endl;
 }

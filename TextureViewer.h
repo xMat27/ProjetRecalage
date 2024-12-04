@@ -11,6 +11,10 @@
 #include <algorithm>
 #include "Texture.h"
 
+namespace cimg_library {
+    template<typename T> class CImg; // Déclaration anticipée
+}
+
 
 class TextureViewer : public QGLViewer
 {
@@ -24,8 +28,9 @@ public :
     float computeDistance(const QVector3D& p1, const QVector3D& p2);
     float computeDistanceToNormal(const QVector3D& point, const QVector3D& normal, const QVector3D& origin);
     void applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations = 10, float tolerance = 1e-6);
+    void display2DProjection(const cimg_library::CImg<unsigned char>& projection);
     void open3DImage(const QString & fileName);
-    bool openCImage(const std::string& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData);
+    bool openCImage(const QString& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData, std::vector<QVector3D>& points);
     void openOffMesh(const QString & fileName);
     void loadOffMesh();
     void recalage();

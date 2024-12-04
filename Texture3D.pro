@@ -25,4 +25,5 @@ INCLUDEPATH = ./GLSL
 LIBS = -lQGLViewer-qt5 \
     -lglut \
     -lGLU \
+    -lX11 \
     -L/usr/lib/x86_64-linux-gnu -lQt5Core
