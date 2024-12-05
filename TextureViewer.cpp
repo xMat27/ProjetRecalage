@@ -230,7 +230,22 @@ void TextureViewer::scaleMeshToFitBoundingBox(float scaleFactor) {
     }
 }
 
+std::pair<QVector3D, QVector3D> computeBoundingBox(const std::vector<QVector3D>& points) {
+    QVector3D minPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    QVector3D maxPoint(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
 
+    for (const auto& point : points) {
+        minPoint.setX(std::min(minPoint.x(), point.x()));
+        minPoint.setY(std::min(minPoint.y(), point.y()));
+        minPoint.setZ(std::min(minPoint.z(), point.z()));
+
+        maxPoint.setX(std::max(maxPoint.x(), point.x()));
+        maxPoint.setY(std::max(maxPoint.y(), point.y()));
+        maxPoint.setZ(std::max(maxPoint.z(), point.z()));
+    }
+
+    return {minPoint, maxPoint};
+}
 
 void TextureViewer::open3DImage(const QString& fileName) {
     // Réinitialisation de l'objet texture et des indices de sous-domaines
@@ -323,9 +338,9 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
             img.load_metaimage(filename.toStdString().c_str());
 
             // Récupérer les dimensions de l'image
-            nx = img.img.width();
-            ny = img.img.height();
-            nz = img.img.depth();
+            nx = img().width();
+            ny = img().height();
+            nz = img().depth();
 
             // Récupérer l'espacement des voxels
             dx = img.voxelSize[0];
@@ -513,11 +528,9 @@ QVector3D computeCentroid(const std::vector<QVector3D>& points) {
 
 void computeTransformation(const std::vector<QVector3D>& source, const std::vector<QVector3D>& target, 
                            QVector3D& translation) {
-    // Calcul des barycentres
     QVector3D centroidSource = computeCentroid(source);
     QVector3D centroidTarget = computeCentroid(target);
 
-    // La translation est la différence entre les barycentres
     translation = centroidTarget - centroidSource;
 }
 
@@ -527,39 +540,59 @@ void applyTransformation(std::vector<QVector3D>& points, const QVector3D& transl
     }
 }
 
-Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centroidB, const std::vector<QVector3D>& A, const std::vector<QVector3D>& B) {
-    float Sxx = 0, Sxy = 0, Sxz = 0;
-    float Syx = 0, Syy = 0, Syz = 0;
-    float Szx = 0, Szy = 0, Szz = 0;
+// Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centroidB, const std::vector<QVector3D>& A, const std::vector<QVector3D>& B) {
+//     float Sxx = 0, Sxy = 0, Sxz = 0;
+//     float Syx = 0, Syy = 0, Syz = 0;
+//     float Szx = 0, Szy = 0, Szz = 0;
 
-    for (size_t i = 0; i < A.size(); ++i) {
-        QVector3D a = A[i] - centroidA;
-        QVector3D b = B[i] - centroidB;
+//     for (size_t i = 0; i < A.size(); ++i) {
+//         QVector3D a = A[i] - centroidA;
+//         QVector3D b = B[i] - centroidB;
 
-        Sxx += a[0] * b[0];
-        Sxy += a[0] * b[1];
-        Sxz += a[0] * b[2];
+//         Sxx += a[0] * b[0];
+//         Sxy += a[0] * b[1];
+//         Sxz += a[0] * b[2];
 
-        Syx += a[1] * b[0];
-        Syy += a[1] * b[1];
-        Syz += a[1] * b[2];
+//         Syx += a[1] * b[0];
+//         Syy += a[1] * b[1];
+//         Syz += a[1] * b[2];
 
-        Szx += a[2] * b[0];
-        Szy += a[2] * b[1];
-        Szz += a[2] * b[2];
+//         Szx += a[2] * b[0];
+//         Szy += a[2] * b[1];
+//         Szz += a[2] * b[2];
+//     }
+
+//     Mat3D rotation = {{{Sxx, Sxy, Sxz}, {Syx, Syy, Syz}, {Szx, Szy, Szz}}};
+
+
+//     float norm = std::sqrt(Sxx * Sxx + Syy * Syy + Szz * Szz);
+//     for (int i = 0; i < 3; ++i) {
+//         for (int j = 0; j < 3; ++j) {
+//             rotation.m[i][j] /= norm;
+//         }
+//     }
+//     return rotation;
+// }
+
+void alignBoundingBoxes(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints) {
+    auto [meshMin, meshMax] = computeBoundingBox(meshVertices);
+    auto [cloudMin, cloudMax] = computeBoundingBox(cloudPoints);
+
+    QVector3D meshCenter = (meshMin + meshMax) / 2.0f;
+    QVector3D cloudCenter = (cloudMin + cloudMax) / 2.0f;
+
+    QVector3D meshSize = meshMax - meshMin;
+    QVector3D cloudSize = cloudMax - cloudMin;
+
+    QVector3D scaleFactor(cloudSize.x() / meshSize.x(), cloudSize.y() / meshSize.y(), cloudSize.z() / meshSize.z());
+
+    for (auto& vertex : meshVertices) {
+        vertex -= meshCenter;
+        vertex *= scaleFactor; 
+        vertex += cloudCenter; 
     }
-
-    Mat3D rotation = {{{Sxx, Sxy, Sxz}, {Syx, Syy, Syz}, {Szx, Szy, Szz}}};
-
-
-    float norm = std::sqrt(Sxx * Sxx + Syy * Syy + Szz * Szz);
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            rotation.m[i][j] /= norm;
-        }
-    }
-    return rotation;
 }
+
 
 // void TextureViewer::applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations, float tolerance) {
     
@@ -622,20 +655,17 @@ Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centro
 
 void TextureViewer::performICP(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints, int maxIterations) {
     for (int iter = 0; iter < maxIterations; ++iter) {
-        // Étape 1 : Trouver les correspondances
         std::vector<QVector3D> correspondences = findClosestPoints(meshVertices, cloudPoints);
 
-        // Étape 2 : Calculer la transformation
         QVector3D translation;
         computeTransformation(meshVertices, correspondences, translation);
 
-        // Étape 3 : Appliquer la transformation
         applyTransformation(meshVertices, translation);
 
-        // Afficher l'état de la transformation
+        
         qDebug() << "Iteration" << iter << ": Translation" << translation;
 
-        // Critère d'arrêt : si la translation est proche de 0, on arrête
+        
         if (translation.length() < 1e-5) {
             break;
         }
@@ -643,22 +673,21 @@ void TextureViewer::performICP(std::vector<QVector3D>& meshVertices, const std::
 }
 
 void TextureViewer::alignMeshWithPointCloud() {
-    // Convertir les sommets du maillage en QVector3D
+    
     std::vector<QVector3D> meshVertices;
     for (const Vec& vertex : vertices) {
         meshVertices.emplace_back(vertex.x, vertex.y, vertex.z);
     }
 
-    // `points` contient les points 3D extraits de l'image `.mhd`
+    alignBoundingBoxes(meshVertices, points);
     performICP(meshVertices, points);
 
-    // Mettre à jour les sommets du maillage après recalage
+    
     vertices.clear();
     for (const auto& point : meshVertices) {
         vertices.push_back(Vec(point.x(), point.y(), point.z()));
     }
 
-    // Rafraîchir l'affichage
     update();
 }
 
@@ -672,7 +701,7 @@ void TextureViewer::alignMeshWithPointCloud() {
 // }
 
 void TextureViewer::openMesh() {
-    QString fileName = QFileDialog::getOpenFileName(this, "Open OFF File", "", "OFF Files (*.off);;All Files (*)");
+    QString fileName = QFileDialog::getOpenFileName(this, "Open Mesh File", "", "OFF Files (*.off);;OBJ Files (*.obj);;All Files (*)");
     std::cout << "Opening " << fileName.toStdString() << std::endl;
 
     // Open the file
@@ -699,7 +728,7 @@ void TextureViewer::openMesh() {
     myfile.close();
 
     // Scale the mesh and update the viewer
-    scaleMeshToFitBoundingBox(1.0);
+    scaleMeshToFitBoundingBox(10.0);
     update();
 }
 

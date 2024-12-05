@@ -92,7 +92,7 @@ Window::Window()
 void Window::open3DImage(){
 
     QString selectedFilter, openFileNameLabel;
-    QString fileFilter = "Known Filetypes (*.dim *.nii);;IMA (*.dim);;NIFTI (*.nii);;MHD (*.mhd)";
+    QString fileFilter = "Known Filetypes (*.dim *.nii *.mhd);;IMA (*.dim);;NIFTI (*.nii);;MHD (*.mhd)";
 
     QString fileName = QFileDialog::getOpenFileName(this,
                                                     tr("Select an input 3D image"),

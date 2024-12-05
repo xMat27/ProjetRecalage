@@ -37,7 +37,7 @@ MOVE          = mv -f
 TAR           = tar -cf
 COMPRESS      = gzip -9f
 DISTNAME      = texture3D1.0.0
-DISTDIR = /mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/obj/texture3D1.0.0
+DISTDIR = /home/e20190003297/Documents/ProjetRecalage/obj/texture3D1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1
 LIBS          = $(SUBLIBS) -lQGLViewer-qt5 -lglut -lGLU -lX11 -L/usr/lib/x86_64-linux-gnu -lQt5Core /usr/lib/x86_64-linux-gnu/libQt5OpenGL.so /usr/lib/x86_64-linux-gnu/libQt5Widgets.so /usr/lib/x86_64-linux-gnu/libQt5Gui.so /usr/lib/x86_64-linux-gnu/libQt5Xml.so /usr/lib/x86_64-linux-gnu/libQt5Core.so -lGL -lpthread   
@@ -149,7 +149,7 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		Texture.h \
 		TextureDockWidget.h \
 		Vec3D.h \
-		Img.h Main.cpp \
+		img.h Main.cpp \
 		Window.cpp \
 		TextureViewer.cpp \
 		Texture.cpp \
@@ -341,7 +341,7 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents Window.h TextureViewer.h Texture.h TextureDockWidget.h Vec3D.h Img.h $(DISTDIR)/
+	$(COPY_FILE) --parents Window.h TextureViewer.h Texture.h TextureDockWidget.h Vec3D.h img.h $(DISTDIR)/
 	$(COPY_FILE) --parents Main.cpp Window.cpp TextureViewer.cpp Texture.cpp TextureDockWidget.cpp $(DISTDIR)/
 
 
@@ -384,14 +384,14 @@ moc/moc_Window.cpp: Window.h \
 		Vec3D.h \
 		moc/moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include Window.h -o moc/moc_Window.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/e20190003297/Documents/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/e20190003297/Documents/ProjetRecalage -I/home/e20190003297/Documents/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include Window.h -o moc/moc_Window.cpp
 
 moc/moc_TextureViewer.cpp: TextureViewer.h \
 		Texture.h \
 		Vec3D.h \
 		moc/moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include TextureViewer.h -o moc/moc_TextureViewer.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/e20190003297/Documents/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/e20190003297/Documents/ProjetRecalage -I/home/e20190003297/Documents/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include TextureViewer.h -o moc/moc_TextureViewer.cpp
 
 moc/moc_TextureDockWidget.cpp: TextureDockWidget.h \
 		TextureViewer.h \
@@ -399,7 +399,7 @@ moc/moc_TextureDockWidget.cpp: TextureDockWidget.h \
 		Vec3D.h \
 		moc/moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage -I/mnt/c/Users/matle/Documents/Info/Master/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include TextureDockWidget.h -o moc/moc_TextureDockWidget.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/e20190003297/Documents/ProjetRecalage/moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/e20190003297/Documents/ProjetRecalage -I/home/e20190003297/Documents/ProjetRecalage/GLSL -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtOpenGL -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/x86_64-linux-gnu/11/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include TextureDockWidget.h -o moc/moc_TextureDockWidget.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
