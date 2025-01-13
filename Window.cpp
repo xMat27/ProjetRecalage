@@ -29,7 +29,8 @@ Window::Window()
     //QAction * actionLoadCimage = new QAction("Load Cimage", this);
     QAction * actionLoadOffMesh = new QAction("Load 3D Mesh (OFF)", this);
     QAction * recompileShaders = new QAction("Recompile shaders", this);
-    QAction * actionRecale = new QAction("Recaler", this);
+    QAction * actionRecale = new QAction("Recaler (ARAP)", this);
+    QAction * actionRecaleRigid = new QAction("Recaler (Rigide)", this);
 
 
     QMenu * menuFile = new QMenu("File", this);
@@ -37,11 +38,17 @@ Window::Window()
     menuFile->addAction(actionLoad3Dimage);
     menuFile->addAction(actionLoadOffMesh);
 
+    QMenu * menuReca = new QMenu("Recaler", this);
+
+    menuReca->addAction(actionRecale);
+    menuReca->addAction(actionRecaleRigid);
+
 
     connect(actionLoad3Dimage, SIGNAL(triggered()), this, SLOT(open3DImage()));
     //connect(actionLoadCimage, SIGNAL(triggered()), this, SLOT(openCImage()));
     connect(actionLoadOffMesh, &QAction::triggered, viewer, &TextureViewer::openMesh);
     connect(actionRecale, &QAction::triggered, viewer, &TextureViewer::alignMeshWithPointCloud);
+    connect(actionRecaleRigid, &QAction::triggered, viewer, &TextureViewer::alignMeshWithPointCloudRigid);
     connect(recompileShaders, &QAction::triggered, viewer, &TextureViewer::recompileShaders);
 
     QGroupBox * viewerGroupBox = new QGroupBox ("Texture viewer", this);
@@ -75,7 +82,7 @@ Window::Window()
 
     menubar->addAction(menuFile->menuAction());
     menubar->addAction(recompileShaders);
-    menubar->addAction(actionRecale);
+    menubar->addAction(menuReca->menuAction());
 
     this->setMenuBar(menubar);
 

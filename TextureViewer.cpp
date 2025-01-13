@@ -230,22 +230,7 @@ void TextureViewer::scaleMeshToFitBoundingBox(float scaleFactor) {
     }
 }
 
-std::pair<QVector3D, QVector3D> computeBoundingBox(const std::vector<QVector3D>& points) {
-    QVector3D minPoint(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-    QVector3D maxPoint(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
 
-    for (const auto& point : points) {
-        minPoint.setX(std::min(minPoint.x(), point.x()));
-        minPoint.setY(std::min(minPoint.y(), point.y()));
-        minPoint.setZ(std::min(minPoint.z(), point.z()));
-
-        maxPoint.setX(std::max(maxPoint.x(), point.x()));
-        maxPoint.setY(std::max(maxPoint.y(), point.y()));
-        maxPoint.setZ(std::max(maxPoint.z(), point.z()));
-    }
-
-    return {minPoint, maxPoint};
-}
 
 void TextureViewer::open3DImage(const QString& fileName) {
     // Réinitialisation de l'objet texture et des indices de sous-domaines
@@ -260,13 +245,13 @@ void TextureViewer::open3DImage(const QString& fileName) {
     if (fileName.endsWith(".dim")) {
         openIMA(fileName, data, subdomain_indices, nx, ny, nz, dx, dy, dz);
     } else if (fileName.endsWith(".mhd")) {
-        if (!openCImage(fileName, nx, ny, nz, dx, dy, dz, data, points)) {
+        if (!openCImage(fileName, nx, ny, nz, dx, dy, dz, data, subdomain_indices, points)) {
             qWarning("Échec du chargement de l'image .mhd");
             return;
         }
 
         // Normalisation des données (conversion de float à unsigned char si nécessaire)
-        std::vector<unsigned char> imageData(data.begin(), data.end());
+        //std::vector<unsigned char> imageData(data.begin(), data.end());
 
         // Simuler les indices de sous-domaines (par exemple : 1 partout)
         subdomain_indices.resize(nx * ny * nz, 1);
@@ -286,6 +271,17 @@ void TextureViewer::open3DImage(const QString& fileName) {
                 iColorMap[currentLabel].setHsvF(0.98 * double(i) / subdomain_indices.size(), 0.8, 0.8);
         }
         iDisplayMap[currentLabel] = true;
+        // int currentLabel = subdomain_indices[i];
+        // std::map<unsigned char, QColor>::iterator it = iColorMap.find(currentLabel);
+        // if (it == iColorMap.end()) {
+        //     if (currentLabel == 0)
+        //         iColorMap[currentLabel] = QColor(0, 0, 0);
+        //     else {
+        //         int intensity = static_cast<int>(255.0 * double(i) / subdomain_indices.size());
+        //         iColorMap[currentLabel] = QColor(intensity, intensity, intensity);
+        //     }
+        // }
+        iDisplayMap[currentLabel] = true;
     }
 
     // Construction de la texture
@@ -301,11 +297,10 @@ void TextureViewer::open3DImage(const QString& fileName) {
     emit setImageLabels();
 
     // Afficher les points récupérés
-    qDebug() << "Nombre de points récupérés : " << points.size();
-//     for (const QVector3D& point : points) {
-//         qDebug() << "Point : (" << point.x() << ", " << point.y() << ", " << point.z() << ")";
-//     }
+    qDebug() << "Nombre de points récupérés : " << subdomain_indices.size();
 }
+
+
 
 
 void TextureViewer::display2DProjection(const cimg_library::CImg<unsigned char>& projection) {
@@ -330,7 +325,7 @@ void TextureViewer::display2DProjection(const cimg_library::CImg<unsigned char>&
 
 bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsigned int& ny, unsigned int& nz, 
                                 float& dx, float& dy, float& dz, std::vector<unsigned char>& imageData, 
-                                std::vector<QVector3D>& points) {
+                                std::vector<unsigned char>& indices, std::vector<QVector3D>& points) {
     try {
         if (filename.endsWith(".mhd")) {
             // Charger les métadonnées du fichier .mhd
@@ -338,9 +333,9 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
             img.load_metaimage(filename.toStdString().c_str());
 
             // Récupérer les dimensions de l'image
-            nx = img().width();
-            ny = img().height();
-            nz = img().depth();
+            nx = img.img.width();
+            ny = img.img.height();
+            nz = img.img.depth();
 
             // Récupérer l'espacement des voxels
             dx = img.voxelSize[0];
@@ -351,7 +346,10 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
             imageData.assign(img.img.data(), img.img.data() + nx * ny * nz);
 
             // Récupérer les points 3D (convertir les indices de voxels en coordonnées réelles)
+            indices.clear();
+            indices.insert(indices.end(), img.img.data(), img.img.data() + nx * ny * nz);
             points.clear();
+            #pragma omp parallel for collapse(3)
             for (unsigned int z = 0; z < nz; ++z) {
                 for (unsigned int y = 0; y < ny; ++y) {
                     for (unsigned int x = 0; x < nx; ++x) {
@@ -364,11 +362,11 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
                         point.setZ(z * dz);
 
                         // Ajouter le point à la liste des points
+                        #pragma omp critical
                         points.push_back(point);
                     }
                 }
             }
-
             return true;
         } else {
             qWarning("Fichier non supporté : %s", filename.toStdString().c_str());
@@ -383,6 +381,89 @@ bool TextureViewer::openCImage(const QString& filename, unsigned int& nx, unsign
 
 
 
+// Fonction pour le recalage non rigide avec ARAP
+void TextureViewer::performNonRigidAlignment(std::vector<QVector3D>& source, const std::vector<QVector3D>& target, int iterations) {
+    if (source.size() != target.size()) {
+        qWarning("Source and target point clouds must have the same size for ARAP alignment.");
+
+        // Resize the target to match the source size using nearest neighbor sampling
+        std::vector<QVector3D> resizedTarget;
+        int step = target.size() / source.size();
+        for (int i = 0; i < source.size(); ++i) {
+            resizedTarget.push_back(target[i * step]);
+        }
+
+        // Use resizedTarget for alignment
+        performNonRigidAlignment(source, resizedTarget, iterations);
+        return;
+    }
+
+    std::vector<QVector3D> deformed = source;
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        QVector3D sourceCentroid(0.0f, 0.0f, 0.0f);
+        QVector3D targetCentroid(0.0f, 0.0f, 0.0f);
+
+        for (const auto& p : source) {
+            sourceCentroid += p;
+        }
+        sourceCentroid /= static_cast<float>(source.size());
+
+        for (const auto& p : deformed) {
+            targetCentroid += p;
+        }
+        targetCentroid /= static_cast<float>(deformed.size());
+
+        // Compute the covariance matrix
+        float covariance[3][3] = {0};
+
+        for (int i = 0; i < source.size(); ++i) {
+            QVector3D localSource = source[i] - sourceCentroid;
+            QVector3D localTarget = target[i] - targetCentroid;
+
+            covariance[0][0] += localSource.x() * localTarget.x();
+            covariance[0][1] += localSource.x() * localTarget.y();
+            covariance[0][2] += localSource.x() * localTarget.z();
+
+            covariance[1][0] += localSource.y() * localTarget.x();
+            covariance[1][1] += localSource.y() * localTarget.y();
+            covariance[1][2] += localSource.y() * localTarget.z();
+
+            covariance[2][0] += localSource.z() * localTarget.x();
+            covariance[2][1] += localSource.z() * localTarget.y();
+            covariance[2][2] += localSource.z() * localTarget.z();
+        }
+
+        // Compute the rotation matrix using a simplified approach (direct computation)
+        float U[3][3] = {0}, V[3][3] = {0}, R[3][3] = {0};
+
+        // Perform a basic orthogonalization process on covariance (SVD alternative)
+        // This is a simplified version and may not work for all cases
+        // TODO: Implement robust SVD if higher accuracy is required
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                R[i][j] = covariance[i][j]; // Directly use covariance as rotation approximation for simplicity
+            }
+        }
+
+        for (int i = 0; i < source.size(); ++i) {
+            QVector3D localSource = source[i] - sourceCentroid;
+            QVector3D rotated(
+                R[0][0] * localSource.x() + R[0][1] * localSource.y() + R[0][2] * localSource.z(),
+                R[1][0] * localSource.x() + R[1][1] * localSource.y() + R[1][2] * localSource.z(),
+                R[2][0] * localSource.x() + R[2][1] * localSource.y() + R[2][2] * localSource.z()
+            );
+
+            deformed[i] = rotated + targetCentroid;
+        }
+
+        // Debug: Print iteration info
+        qDebug() << "Iteration " << iter + 1 << "/" << iterations << " completed.";
+    }
+
+    // Update source points with final deformed configuration
+    source = deformed;
+}
 
 void TextureViewer::loadOffMesh(std::ifstream& myfile) {
     std::string magic_s;
@@ -528,9 +609,11 @@ QVector3D computeCentroid(const std::vector<QVector3D>& points) {
 
 void computeTransformation(const std::vector<QVector3D>& source, const std::vector<QVector3D>& target, 
                            QVector3D& translation) {
+    // Calcul des barycentres
     QVector3D centroidSource = computeCentroid(source);
     QVector3D centroidTarget = computeCentroid(target);
 
+    // La translation est la différence entre les barycentres
     translation = centroidTarget - centroidSource;
 }
 
@@ -540,59 +623,39 @@ void applyTransformation(std::vector<QVector3D>& points, const QVector3D& transl
     }
 }
 
-// Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centroidB, const std::vector<QVector3D>& A, const std::vector<QVector3D>& B) {
-//     float Sxx = 0, Sxy = 0, Sxz = 0;
-//     float Syx = 0, Syy = 0, Syz = 0;
-//     float Szx = 0, Szy = 0, Szz = 0;
+Mat3D computeOptimalRotation(const QVector3D& centroidA, const QVector3D& centroidB, const std::vector<QVector3D>& A, const std::vector<QVector3D>& B) {
+    float Sxx = 0, Sxy = 0, Sxz = 0;
+    float Syx = 0, Syy = 0, Syz = 0;
+    float Szx = 0, Szy = 0, Szz = 0;
 
-//     for (size_t i = 0; i < A.size(); ++i) {
-//         QVector3D a = A[i] - centroidA;
-//         QVector3D b = B[i] - centroidB;
+    for (size_t i = 0; i < A.size(); ++i) {
+        QVector3D a = A[i] - centroidA;
+        QVector3D b = B[i] - centroidB;
 
-//         Sxx += a[0] * b[0];
-//         Sxy += a[0] * b[1];
-//         Sxz += a[0] * b[2];
+        Sxx += a[0] * b[0];
+        Sxy += a[0] * b[1];
+        Sxz += a[0] * b[2];
 
-//         Syx += a[1] * b[0];
-//         Syy += a[1] * b[1];
-//         Syz += a[1] * b[2];
+        Syx += a[1] * b[0];
+        Syy += a[1] * b[1];
+        Syz += a[1] * b[2];
 
-//         Szx += a[2] * b[0];
-//         Szy += a[2] * b[1];
-//         Szz += a[2] * b[2];
-//     }
-
-//     Mat3D rotation = {{{Sxx, Sxy, Sxz}, {Syx, Syy, Syz}, {Szx, Szy, Szz}}};
-
-
-//     float norm = std::sqrt(Sxx * Sxx + Syy * Syy + Szz * Szz);
-//     for (int i = 0; i < 3; ++i) {
-//         for (int j = 0; j < 3; ++j) {
-//             rotation.m[i][j] /= norm;
-//         }
-//     }
-//     return rotation;
-// }
-
-void alignBoundingBoxes(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints) {
-    auto [meshMin, meshMax] = computeBoundingBox(meshVertices);
-    auto [cloudMin, cloudMax] = computeBoundingBox(cloudPoints);
-
-    QVector3D meshCenter = (meshMin + meshMax) / 2.0f;
-    QVector3D cloudCenter = (cloudMin + cloudMax) / 2.0f;
-
-    QVector3D meshSize = meshMax - meshMin;
-    QVector3D cloudSize = cloudMax - cloudMin;
-
-    QVector3D scaleFactor(cloudSize.x() / meshSize.x(), cloudSize.y() / meshSize.y(), cloudSize.z() / meshSize.z());
-
-    for (auto& vertex : meshVertices) {
-        vertex -= meshCenter;
-        vertex *= scaleFactor; 
-        vertex += cloudCenter; 
+        Szx += a[2] * b[0];
+        Szy += a[2] * b[1];
+        Szz += a[2] * b[2];
     }
-}
 
+    Mat3D rotation = {{{Sxx, Sxy, Sxz}, {Syx, Syy, Syz}, {Szx, Szy, Szz}}};
+
+
+    float norm = std::sqrt(Sxx * Sxx + Syy * Syy + Szz * Szz);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            rotation.m[i][j] /= norm;
+        }
+    }
+    return rotation;
+}
 
 // void TextureViewer::applyICP(const std::vector<QVector3D>& targetPoints, std::vector<QVector3D>& sourcePoints, int maxIterations, float tolerance) {
     
@@ -655,42 +718,74 @@ void alignBoundingBoxes(std::vector<QVector3D>& meshVertices, const std::vector<
 
 void TextureViewer::performICP(std::vector<QVector3D>& meshVertices, const std::vector<QVector3D>& cloudPoints, int maxIterations) {
     for (int iter = 0; iter < maxIterations; ++iter) {
+        // Étape 1 : Trouver les correspondances
         std::vector<QVector3D> correspondences = findClosestPoints(meshVertices, cloudPoints);
 
+        // Étape 2 : Calculer la transformation
         QVector3D translation;
         computeTransformation(meshVertices, correspondences, translation);
 
+        // Étape 3 : Appliquer la transformation
         applyTransformation(meshVertices, translation);
 
-        
+        // Afficher l'état de la transformation
         qDebug() << "Iteration" << iter << ": Translation" << translation;
 
-        
+        // Critère d'arrêt : si la translation est proche de 0, on arrête
         if (translation.length() < 1e-5) {
             break;
         }
     }
 }
 
-void TextureViewer::alignMeshWithPointCloud() {
-    
+void TextureViewer::alignMeshWithPointCloudRigid() {
+    if (vertices.empty() || points.empty()) {
+        qWarning("Données insuffisantes pour le recalage.");
+        return;
+    }
+
+    // Convertir les sommets en QVector3D
     std::vector<QVector3D> meshVertices;
     for (const Vec& vertex : vertices) {
         meshVertices.emplace_back(vertex.x, vertex.y, vertex.z);
     }
 
-    alignBoundingBoxes(meshVertices, points);
-    performICP(meshVertices, points);
+    // Appliquer ARAP
+    performICP(meshVertices, points, 20); // 20 itérations
 
-    
+    // Mettre à jour les sommets
     vertices.clear();
     for (const auto& point : meshVertices) {
         vertices.push_back(Vec(point.x(), point.y(), point.z()));
     }
 
-    update();
+    update(); // Rafraîchir l'affichage
 }
 
+
+void TextureViewer::alignMeshWithPointCloud() {
+    if (vertices.empty() || points.empty()) {
+        qWarning("Données insuffisantes pour le recalage.");
+        return;
+    }
+
+    // Convertir les sommets en QVector3D
+    std::vector<QVector3D> meshVertices;
+    for (const Vec& vertex : vertices) {
+        meshVertices.emplace_back(vertex.x, vertex.y, vertex.z);
+    }
+
+    // Appliquer ARAP
+    performNonRigidAlignment(meshVertices, points, 20); // 20 itérations
+
+    // Mettre à jour les sommets
+    vertices.clear();
+    for (const auto& point : meshVertices) {
+        vertices.push_back(Vec(point.x(), point.y(), point.z()));
+    }
+
+    update(); // Rafraîchir l'affichage
+}
 
 
 // void TextureViewer::loadOffMesh() {
@@ -701,7 +796,7 @@ void TextureViewer::alignMeshWithPointCloud() {
 // }
 
 void TextureViewer::openMesh() {
-    QString fileName = QFileDialog::getOpenFileName(this, "Open Mesh File", "", "OFF Files (*.off);;OBJ Files (*.obj);;All Files (*)");
+    QString fileName = QFileDialog::getOpenFileName(this, "Open OFF File", "", "OFF Files (*.off);;All Files (*)");
     std::cout << "Opening " << fileName.toStdString() << std::endl;
 
     // Open the file
@@ -728,7 +823,7 @@ void TextureViewer::openMesh() {
     myfile.close();
 
     // Scale the mesh and update the viewer
-    scaleMeshToFitBoundingBox(10.0);
+    scaleMeshToFitBoundingBox(3.0);
     update();
 }
 
